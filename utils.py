@@ -427,7 +427,7 @@ def update_article_metadata(reader, folder_path=None, owner=None, import_id=None
         if primary_row:
             import_custom_submission_fields(primary_row, article, errors)
 
-    return errors, actions
+    return errors, csv_import
 
 
 def update_article(article, issue, prepared_row, folder_path):

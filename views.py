@@ -11,6 +11,8 @@ from django.http import Http404
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import translation
 
+from django_q.tasks import async_task
+
 from rest_framework import viewsets
 from rest_framework.decorators import api_view, permission_classes
 
@@ -149,7 +151,7 @@ def import_action(request, filename):
 
             if not errors:
                 with translation.override(settings.LANGUAGE_CODE):
-                    errors, actions = utils.update_article_metadata(
+                    errors, csv_import = utils.update_article_metadata(
                         reader,
                         folder_path,
                         owner=request.user,
@@ -529,3 +531,29 @@ def import_from_jats(request):
     }
 
     return render(request, template, context)
+
+
+def queue_import(request, filename):
+    path = files.get_temp_file_path_from_name(filename)
+    
+    if not os.path.exists(path):
+        raise Http404()
+
+    path, folder_path, errors = utils.prep_update_file(path)
+
+    if errors:
+        for error in errors:
+            messages.add_message(request, messages.ERROR, error)
+    else:
+        async_task(
+            'plugins.imports.tasks.update_article_metadata',
+            request.journal.code,
+            path,
+            folder_path,
+            request.user,
+            filename
+        )
+
+        messages.add_message(request, messages.SUCCESS, 'Import queued')
+
+    return redirect(reverse('imports_index'))
