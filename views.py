@@ -11,8 +11,6 @@ from django.http import Http404
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import translation
 
-from django_q.tasks import async_task
-
 from rest_framework import viewsets
 from rest_framework.decorators import api_view, permission_classes
 
@@ -172,6 +170,7 @@ def import_action(request, filename):
         'errors': errors,
         'error_file': error_file,
         'type': request_type,
+        'async_active': getattr(settings, 'ASYNC_IMPORTS_ACTIVE', False),
     }
 
     return render(request, template, context)
@@ -532,28 +531,35 @@ def import_from_jats(request):
 
     return render(request, template, context)
 
-
+@staff_member_required
 def queue_import(request, filename):
-    path = files.get_temp_file_path_from_name(filename)
-    
-    if not os.path.exists(path):
-        raise Http404()
+    # Add some protection so if admins don't want to allow
+    # async processing it can be deactivated and it won't
+    # cause problems.  Users shouldn't get here at all
+    if getattr(settings, 'ASYNC_IMPORTS_ACTIVE', False):
+        path = files.get_temp_file_path_from_name(filename)
 
-    path, folder_path, errors = utils.prep_update_file(path)
+        if not os.path.exists(path):
+            raise Http404()
 
-    if errors:
-        for error in errors:
-            messages.add_message(request, messages.ERROR, error)
-    else:
-        async_task(
-            'plugins.imports.tasks.update_article_metadata',
-            request.journal.code,
-            path,
-            folder_path,
-            request.user,
-            filename
-        )
+        path, folder_path, errors = utils.prep_update_file(path)
 
-        messages.add_message(request, messages.SUCCESS, 'Import queued')
+        if errors:
+            for error in errors:
+                messages.add_message(request, messages.ERROR, error)
+        else:
+            try:
+                from django_q.tasks import async_task
+                async_task(
+                    'plugins.imports.tasks.update_article_metadata',
+                    request.journal.code,
+                    path,
+                    folder_path,
+                    request.user,
+                    filename
+                )
+                messages.add_message(request, messages.SUCCESS, 'Import queued')
+            except (ImportError, ModuleNotFoundError):
+                pass
 
     return redirect(reverse('imports_index'))

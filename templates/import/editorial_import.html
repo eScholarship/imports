@@ -55,10 +55,12 @@
                     {% csrf_token %}
                     <button name="submit" class="button">Import</button>
                 </form>
+                {% if async_active %}
                 <form method="POST" action="{% url 'queue_import' filename %}">
                     {% csrf_token %}
                     <button name="submit" class="button">Queue Import</button>
                 </form>
+                {% endif %}
             {% endif %}
         </div>
     </div>
