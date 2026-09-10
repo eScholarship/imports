@@ -136,6 +136,8 @@ def import_action(request, filename):
                     request, reader)
         elif request_type == 'article-reviews':
             utils.import_reviews(request, reader)
+        elif request_type == 'supp_files':
+            errors, error_file = utils.import_supp_files(request, reader)
         elif request_type == 'update':
 
             # Verify a few things to help user spot problems
@@ -317,7 +319,6 @@ def wordpress_xmlrpc_import(request):
     }
 
     return render(request, template, context)
-
 
 @staff_member_required
 def wordpress_posts(request, import_id):

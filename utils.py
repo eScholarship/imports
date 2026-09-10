@@ -23,7 +23,7 @@ from django.utils.timezone import is_aware, make_aware, now
 from core import models as core_models, files, logic as core_logic, workflow, plugin_loader
 from identifiers import models as id_models
 from journal import models as journal_models
-from production.logic import handle_zipped_galley_images, save_galley
+from production.logic import handle_zipped_galley_images, save_galley, save_supp_file
 from review import models as review_models
 from submission import models as submission_models
 from utils import setting_handler
@@ -417,7 +417,7 @@ def update_article_metadata(reader, folder_path=None, owner=None, import_id=None
                 )
         if (primary_row and primary_row.get("PDF URI")):
             try:
-                import_galley_from_uri( article, primary_row["PDF URI"])
+                import_file_from_uri( article, primary_row["PDF URI"])
             except Exception as e:
                 errors.append({
                         'article': primary_row.get('Article title'),
@@ -724,6 +724,31 @@ def validate_char_field(path, errors, field, choices):
 
     return errors
 
+def import_supp_files(request, reader):
+    headers = next(reader)  # skip headers
+
+    errors = {}
+    uuid_filename = '{0}-{1}.csv'.format(TMP_PREFIX, uuid.uuid4())
+    csv_import, _ = models.CSVImport.objects.update_or_create(
+        filename=uuid_filename,
+    )
+    path = files.get_temp_file_path_from_name(uuid_filename)
+    with open(path, "w") as error_file:
+        error_writer = csv.writer(error_file)
+        error_writer.writerow(headers)
+        logger.info("Writing CSV import errors to %s", path)
+
+        for i, line in enumerate(reader, start=2):
+            try:
+                janeway_id = line[0]
+                article = submission_models.Article.objects.get(pk=janeway_id)
+                import_file_from_uri(article, line[2], figures_uri=None, file_type="supp", label=line[1])
+            except Exception as e:
+                errors[i] = e
+                if settings.DEBUG:
+                    logger.exception(e)
+                error_writer.writerow(line)
+    return errors, uuid_filename
 
 def import_article_metadata(request, reader, id_type=None):
     headers = next(reader)  # skip headers
@@ -883,7 +908,7 @@ def import_article_row(row, journal, issue_type, article=None):
     #files import
     for uri in (pdf, html, xml):
         if uri:
-            import_galley_from_uri(article, uri, figures)
+            import_file_from_uri(article, uri, figures)
 
     return article
 
@@ -950,7 +975,7 @@ def import_corporate_author(author_fields, article):
     )
     return author, frozen_author
 
-def import_galley_from_uri(article, uri, figures_uri=None):
+def import_file_from_uri(article, uri, figures_uri=None, file_type="galley", label=None):
     parsed = urlparse(uri)
     django_file = None
     if parsed.scheme == "file":
@@ -982,10 +1007,13 @@ def import_galley_from_uri(article, uri, figures_uri=None):
             owner = core_models.Account.objects.filter(
                 is_superuser=True).first()
             request = DummyRequest(user=owner)
-        galley = save_galley(article, request, django_file, True)
-        if figures_uri and galley.label in {"XML", "HTML"}:
-            figures_path = unquote(urlparse(figures_uri).path)
-            handle_zipped_galley_images(figures_path, galley, request)
+        if file_type == "galley":
+            galley = save_galley(article, request, django_file, True)
+            if figures_uri and galley.label in {"XML", "HTML"}:
+                figures_path = unquote(urlparse(figures_uri).path)
+                handle_zipped_galley_images(figures_path, galley, request)
+        elif file_type == "supp":
+            _supp_file = save_supp_file(article, request, django_file, label)
 
 
 def read_local_file(path):
