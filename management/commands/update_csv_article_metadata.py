@@ -9,6 +9,7 @@ from journal import models
 
 from plugins.imports.utils import DummyRequest
 from plugins.imports.utils import update_article_metadata
+from plugins.imports.models import CSVImportCreateArticle, CSVImportUpdateArticle
 
 class Command(BaseCommand):
     """ CLI interface for the CSV importer"""
@@ -24,7 +25,7 @@ class Command(BaseCommand):
 
         with open(options["csv_file"], "r") as f:
             reader = csv.DictReader(f, delimiter=",")
-            rows, actions = update_article_metadata(
+            rows, csv_import = update_article_metadata(
                 reader,
                 owner=owner,
                 import_id=uuid.uuid4()
@@ -33,7 +34,17 @@ class Command(BaseCommand):
             for row in rows:
                 if row.get("error"):
                     self.stderr.write(f"Row failed: {row.error}\n{row.article}")
-            for action in actions:
-                print(action)
 
+            created = CSVImportCreateArticle.objects.filter(csv_import=csv_import).all()
+            total_created = created.count()
+            if total_created > 0:
+                self.stderr.write(f"The following {total_created} articles were created:")
+                for c in created:
+                    self.stderr.write(f"\t{c}")
 
+            updated = CSVImportUpdateArticle.objects.filter(csv_import=csv_import).all()
+            total_updated = updated.count()
+            if total_updated > 0:
+                self.stderr.write(f"The following {total_updated} articles were updated:")
+                for u in updated:
+                    self.stderr.write(f"\t{u}")

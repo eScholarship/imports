@@ -49,12 +49,18 @@
             <table class="small">
                 {% include "import/reader_element.html" with reader=reader %}
             </table>
+          </div>
             {% if not errors %}
-           </div>
-            <form method="POST">
-                {% csrf_token %}
-                <button name="submit" class="button">Import</button>
-            </form>
+                <form method="POST">
+                    {% csrf_token %}
+                    <button name="submit" class="button">Import</button>
+                </form>
+                {% if async_active %}
+                <form method="POST" action="{% url 'queue_import' filename %}">
+                    {% csrf_token %}
+                    <button name="submit" class="button">Queue Import</button>
+                </form>
+                {% endif %}
             {% endif %}
         </div>
     </div>

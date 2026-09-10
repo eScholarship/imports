@@ -11,6 +11,7 @@ urlpatterns = [
     re_path(r'^$', views.index, name='imports_index'),
     re_path(r'^upload/$', views.import_load, name='imports_load'),
     re_path(r'^process/(?P<filename>[\w.-]{0,256})$', views.import_action, name='imports_action'),
+    re_path(r'^queue/(?P<filename>[\w.-]{0,256})$', views.queue_import, name='queue_import'),
 
     re_path(r'^review_forms/$', views.review_forms, name='imports_review_forms'),
     re_path(r'^favicon/$', views.favicon, name='imports_favicon'),
