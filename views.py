@@ -137,7 +137,7 @@ def import_action(request, filename):
         elif request_type == 'article-reviews':
             utils.import_reviews(request, reader)
         elif request_type == 'supp_files':
-            errors, error_file = utils.import_supp_files(request, reader)
+            errors, error_file = utils.import_supp_files(reader)
         elif request_type == 'update':
 
             # Verify a few things to help user spot problems
@@ -543,16 +543,41 @@ def queue_import(request, filename):
         if not os.path.exists(path):
             raise Http404()
 
-        path, folder_path, errors = utils.prep_update_file(path)
+        try:
+            from django_q.tasks import async_task
+        except (ImportError, ModuleNotFoundError):
+            raise Http404()
 
-        if errors:
-            for error in errors:
-                messages.add_message(request, messages.ERROR, error)
-        else:
-            try:
-                from django_q.tasks import async_task
+        request_type = request.GET.get('type')
+
+        if request_type == 'update':
+            path, folder_path, errors = utils.prep_update_file(path)
+
+            if errors:
+                # If we have any errors delete the temp folder and redirect back.
+                messages.add_message(
+                    request,
+                    messages.ERROR,
+                    ', '.join(errors)
+                )
+                shutil.rmtree(folder_path)
+                return redirect(
+                    reverse(
+                        'import_export_articles_all'
+                    )
+                )
+
+            errors = utils.verify_headers(path, errors)
+
+            errors = utils.validate_selected_char_fields(
+                path,
+                errors,
+                request.journal
+            )
+
+            if not errors:
                 async_task(
-                    'plugins.imports.tasks.update_article_metadata',
+                    "plugins.imports.tasks.update_article_metadata",
                     request.journal.code,
                     path,
                     folder_path,
@@ -560,7 +585,15 @@ def queue_import(request, filename):
                     filename
                 )
                 messages.add_message(request, messages.SUCCESS, 'Import queued')
-            except (ImportError, ModuleNotFoundError):
-                pass
+        elif request_type == 'supp_files':
+            async_task(
+                "plugins.imports.tasks.import_supp_files",
+                request.journal.code,
+                path,
+                request.user,
+            )
+            messages.add_message(request, messages.SUCCESS, 'Import queued')
+        else:
+            raise Http404()
 
     return redirect(reverse('imports_index'))

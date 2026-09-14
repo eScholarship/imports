@@ -724,7 +724,7 @@ def validate_char_field(path, errors, field, choices):
 
     return errors
 
-def import_supp_files(request, reader):
+def import_supp_files(reader):
     headers = next(reader)  # skip headers
 
     errors = {}
