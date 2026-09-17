@@ -5,7 +5,8 @@ from itertools import chain
 import os
 import re
 import zipfile
-
+import uuid
+import requests_mock
 
 from django.conf import settings
 from django.http import HttpRequest
@@ -48,13 +49,14 @@ def run_import(csv_string_or_dict, path_to_zip=None, owner=None, **kwargs):
     else:
         zip_folder_path = ''
 
-    errors, actions = utils.update_article_metadata(
+    errors, csv_import = utils.update_article_metadata(
         reader,
         zip_folder_path,
         owner=owner,
         mock_import_stages=mock_import_stages,
+        import_id=uuid.uuid4()
     )
-    return errors, actions
+    return errors, csv_import
 
 
 def read_saved_article_data(article_pk, structure='string'):
@@ -252,7 +254,7 @@ class TestImportAndUpdate(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-
+        helpers.create_roles(["author"])
         cls.journal_one, cls.journal_two = helpers.create_journals()
         cls.journal_one.workflow()
         issue_type = journal_models.IssueType.objects.get_or_create(
@@ -275,16 +277,17 @@ class TestImportAndUpdate(TestCase):
             if element:
                 cls.journal_one.workflow().elements.add(element)
         csv_data_2 = CSV_DATA_1
-        cls.errors, cls.actions = run_import(
+        cls.errors, cls.csv_import = run_import(
             csv_data_2,
             owner=cls.test_user
         )
-        cls.set_up_article_pk = max(cls.actions.keys()) if cls.actions else None
+        cls.set_up_article_pk = cls.csv_import.get_max_pk() if cls.csv_import else None
+
 
     def tearDown(self):
         reset_csv_data = dict_from_csv_string(CSV_DATA_1)
         reset_csv_data[1]['Janeway ID'] = str(self.set_up_article_pk)
-        errors, actions = run_import(
+        errors, _csv_import = run_import(
             reset_csv_data,
             owner=self.test_user
         )
@@ -375,7 +378,7 @@ class TestImportAndUpdate(TestCase):
         # csv_data_3[1]['Issue title'] = 
         # csv_data_3[1]['Issue pub date'] = 
         csv_data = csv_data_3
-        errors, actions = run_import(csv_data, owner=self.test_user)
+        errors, _csv_import = run_import(csv_data, owner=self.test_user)
         if errors:
             self.fail(
                 "There where import errors, test not completed: %s " % errors
@@ -443,13 +446,13 @@ class TestImportAndUpdate(TestCase):
         csv_data_12.pop(3)
 
         csv_data = csv_data_12
-        errors, actions = run_import(csv_data, owner=self.test_user)
+        errors, csv_import = run_import(csv_data, owner=self.test_user)
         if errors:
             self.fail(
                 "There where import errors, test not completed: %s " % errors
             )
 
-        article_pk = max(actions.keys())
+        article_pk = csv_import.get_max_pk()
         saved_article_data = read_saved_article_data(article_pk, structure='dict')
 
         # add article id and a few other sticky things back to expected data
@@ -523,7 +526,7 @@ class TestImportAndUpdate(TestCase):
         csv_data_13.pop(3)
 
         csv_data = csv_data_13
-        errors, actions = run_import(csv_data, owner=self.test_user)
+        errors, _csv_import = run_import(csv_data, owner=self.test_user)
         if errors:
             self.fail(
                 "There where import errors, test not completed: %s " % errors
@@ -629,13 +632,13 @@ class TestImportAndUpdate(TestCase):
         csv_data_11[1]['Issue pub date'] = '2022-01-15T01:15:15+00:00'
 
         csv_data = csv_data_11
-        errors, actions = run_import(csv_data, owner=self.test_user)
+        errors, csv_import = run_import(csv_data, owner=self.test_user)
         if errors:
             self.fail(
                 "There where import errors, test not completed: %s " % errors
             )
 
-        article_pk = max(actions.keys())
+        article_pk = csv_import.get_max_pk()
 
         # change article id
         csv_data_11[1]['Janeway ID'] = str(article_pk)
@@ -680,7 +683,7 @@ class TestImportAndUpdate(TestCase):
         csv_data_4[1]['Author is primary (Y/N)'] = 'N'
 
         csv_data = csv_data_4
-        errors, actions = run_import(csv_data, owner=self.test_user)
+        errors, _csv_import = run_import(csv_data, owner=self.test_user)
         if errors:
             self.fail(
                 "There where import errors, test not completed: %s " % errors
@@ -796,7 +799,7 @@ class TestImportAndUpdate(TestCase):
         csv_data_5[1]['File import identifier'] = str(self.set_up_article_pk)
 
         csv_data = csv_data_5
-        errors, actions = run_import(csv_data, owner=self.test_user)
+        errors, _csv_import = run_import(csv_data, owner=self.test_user)
         if errors:
             self.fail(
                 "There where import errors, test not completed: %s " % errors
@@ -840,13 +843,13 @@ class TestImportAndUpdate(TestCase):
             csv_data_6[1]['Stage'] = stage_name
 
             csv_data = csv_data_6
-            errors, actions = run_import(csv_data, owner=self.test_user, mock_import_stages=mock_import_stages)
+            errors, csv_import = run_import(csv_data, owner=self.test_user, mock_import_stages=mock_import_stages)
             if errors:
                 self.fail(
                     "There where import errors, test not completed: %s " % errors
                 )
 
-            article_pk = max(actions.keys())
+            article_pk = csv_import.get_max_pk()
 
             # add article id
             csv_data_6[1]['Janeway ID'] = str(article_pk)
@@ -910,7 +913,7 @@ class TestImportAndUpdate(TestCase):
         # Note: Not all of the above should not be importable,
         # esp. the email and orcid
         csv_data = csv_data_7
-        errors, actions = run_import(csv_data, owner=self.test_user)
+        errors, csv_import = run_import(csv_data, owner=self.test_user)
         if errors:
             self.fail(
                 "There where import errors, test not completed: %s " % errors
@@ -923,7 +926,7 @@ class TestImportAndUpdate(TestCase):
         csv_data_7[1]['First page'] = ''
         csv_data_7[1]['Last page'] = ''
 
-        article_pk = max(actions.keys())
+        article_pk = csv_import.get_max_pk()
 
         # add article id
         csv_data_7[1]['Janeway ID'] = str(article_pk)
@@ -946,13 +949,14 @@ class TestImportAndUpdate(TestCase):
             csv_data_9[1][k] = some_whitespace+csv_data_9[1][k]+some_whitespace
 
         csv_data = csv_data_9
-        errors, actions = run_import(csv_data, owner=self.test_user)
+        errors, csv_import = run_import(csv_data, owner=self.test_user)
         if errors:
             self.fail(
                 "There where import errors, test not completed: %s " % errors
             )
 
-        article_pk = max(actions.keys())
+        article_pk = csv_import.get_max_pk()
+
         csv_data_10 = dict_from_csv_string(CSV_DATA_1)
 
         # add article id
@@ -983,13 +987,13 @@ class TestImportAndUpdate(TestCase):
         csv_data_14[1]['Author is primary (Y/N)'] = 'N'
         csv_data_14[1]['Author is corporate (Y/N)'] = 'Y'
 
-        errors, actions = run_import(csv_data_14, owner=self.test_user)
+        errors, csv_import = run_import(csv_data_14, owner=self.test_user)
         if errors:
             self.fail(
                 "There where import errors, test not completed: %s " % errors
             )
 
-        article_pk = max(actions.keys())
+        article_pk = csv_import.get_max_pk()
 
         csv_data_14[1]['Janeway ID'] = str(article_pk)
         csv_data_14[1]['File import identifier'] = str(article_pk)
@@ -1028,6 +1032,7 @@ class TestImportAndUpdate(TestCase):
 #        self.assertEqual(csv_data_15, saved_article_data)
 
     def test_article_agreement_set(self):
+
         article = submission_models.Article.objects.get(id=self.set_up_article_pk)
         self.assertEqual(article.article_agreement, 'Imported article')
 
@@ -1143,22 +1148,22 @@ class TestImportAndUpdate(TestCase):
         ]
 
         csv_data_17[1]['Language'] = expected_languages[0][0]
-        errors, actions = run_import(csv_data_17, owner=self.test_user)
+        errors, csv_import = run_import(csv_data_17, owner=self.test_user)
         if errors:
             self.fail(
                 "There where import errors, test not completed: %s " % errors
             )
-        article_pk = max(actions.keys())
+        article_pk = csv_import.get_max_pk()
         article = submission_models.Article.objects.get(id=article_pk)
         saved_languages.append((article.language, article.get_language_display()))
 
         csv_data_17[1]['Language'] = expected_languages[1][1]
-        errors, actions = run_import(csv_data_17, owner=self.test_user)
+        errors, csv_import = run_import(csv_data_17, owner=self.test_user)
         if errors:
             self.fail(
                 "There where import errors, test not completed: %s " % errors
             )
-        article_pk = max(actions.keys())
+        article_pk = csv_import.get_max_pk()
         article = submission_models.Article.objects.get(id=article_pk)
         saved_languages.append((article.language, article.get_language_display()))
 
@@ -1174,8 +1179,8 @@ class TestImportAndUpdate(TestCase):
         )
         csv_data = dict_from_csv_string(CSV_DATA_1)
         csv_data[1][field_name] = field_answer
-        errors, actions = run_import(csv_data, owner=self.test_user)
-        article_pk = max(actions.keys())
+        errors, csv_import = run_import(csv_data, owner=self.test_user)
+        article_pk = csv_import.get_max_pk()
         article = submission_models.Article.objects.get(id=article_pk)
         self.assertTrue(
             article.custom_fields.filter(answer=field_answer).exists(),
@@ -1192,11 +1197,33 @@ class TestImportAndUpdate(TestCase):
         )
         csv_data = dict_from_csv_string(CSV_DATA_1)
         csv_data[1][field_name] = field_answer
-        errors, actions = run_import(csv_data, owner=self.test_user)
-        article_pk = max(actions.keys())
+        errors, csv_import = run_import(csv_data, owner=self.test_user)
+        article_pk = csv_import.get_max_pk()
         article = submission_models.Article.objects.get(id=article_pk)
 
         rows = export.generate_rows_for_article(article)
 
         self.assertEqual(rows[0][field_name], field_answer)
+
+    def test_import_supp_files(self):
+        article = helpers.create_article(self.journal_one)
+        test_url = "http://example.com/test.pdf"
+        csv_string = f"Janeway ID,label,url\n{article.pk},Test label,{test_url}"
+        file_bytes = b"%PDF-1.7\nfake PDF contents\n"
+
+        with requests_mock.Mocker() as mock:
+            mock.get(
+                test_url,
+                content=file_bytes,
+                headers={
+                    "Content-Type": "application/pdf",
+                    "Content-Disposition": 'attachment; filename="report.pdf"',
+                },
+            )
+
+            reader = csv.reader(csv_string.splitlines())
+            errors, uuid_filename = utils.import_supp_files(reader)
+
+        self.assertEquals(len(errors), 0)
+        self.assertEquals(article.supplementary_files.count(), 1)
 

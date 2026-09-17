@@ -64,6 +64,9 @@ class CSVImport(models.Model):
         elif self.updated_articles.count() and self.csvimportupdatearticle_set.first():
             return self.csvimportupdatearticle_set.first().imported
 
+    def get_max_pk(self):
+        return max(self.csvimportcreatearticle_set.all().values_list("article__pk", flat=True))
+
     def __str__(self):
         return f'{self.filename}'
 

@@ -605,7 +605,6 @@ def get_author_fields(row):
 
 
 def handle_author_import(row, article, author_order):
-
     author_fields = get_author_fields(row)
     author_fields.append(author_order)
     if row.get('Author is corporate (Y/N)') == 'Y':
@@ -1013,7 +1012,7 @@ def import_file_from_uri(article, uri, figures_uri=None, file_type="galley", lab
                 figures_path = unquote(urlparse(figures_uri).path)
                 handle_zipped_galley_images(figures_path, galley, request)
         elif file_type == "supp":
-            _supp_file = save_supp_file(article, request, django_file, label)
+            save_supp_file(article, request, django_file, label)
 
 
 def read_local_file(path):

@@ -18,7 +18,6 @@ class TestViews(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-
         cls.press = helpers.create_press()
         cls.journal_one, cls.journal_two = helpers.create_journals()
         cls.journal_one.workflow()
@@ -61,8 +60,6 @@ class TestViews(TestCase):
         exportable_stage_choices = [
             element.stage for element in self.journal_one.workflow().elements.all()
         ]
-
-        print(exportable_stage_choices)
 
         csv_data = dict_from_csv_string(CSV_DATA_1)
         for stage in importable_stages:
