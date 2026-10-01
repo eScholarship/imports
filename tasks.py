@@ -33,3 +33,21 @@ def update_article_metadata(journal_code, csv_path, folder_path, owner, filename
         )
 
         send_email("Import Complete", owner.email, body, journal, None)
+
+def import_supp_files(journal_code, csv_path, owner):
+    with open(csv_path, 'r', encoding="utf-8-sig") as f:
+        reader = csv.reader(f)
+
+        journal = Journal.objects.get(code=journal_code)
+        errors, error_file = utils.import_supp_files(reader)
+
+        body = render_to_string(
+            "import/supp_files_import_complete.html",
+            {
+                "errors": errors,
+                "error_file": error_file,
+                "site_url": journal.site_url()
+            },
+        )
+
+        send_email("Supplementary File Import Complete", owner.email, body, journal, None)

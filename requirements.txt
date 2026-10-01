@@ -1,1 +1,2 @@
 python-wordpress-xmlrpc==2.3
+requests_mock

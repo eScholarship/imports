@@ -1,0 +1,16 @@
+The supplemental file import you started is complete.
+
+{% if error_file %}
+    <p><a href="{{ site_url }}{% url 'imports_failed_rows' error_file %}">Download CSV with failed rows</a></p>
+{% endif %}
+
+{% if errors.length > 0 %}
+The following errors occured during import:
+<ul>
+    {% for error in errors %}
+        {% for key,value in error.items %}
+            <li>{{ key }}: {{ value }}</li>
+        {% endfor %}
+    {% endfor %}
+</ul>
+{% endif %}

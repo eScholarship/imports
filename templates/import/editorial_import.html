@@ -56,10 +56,12 @@
                     <button name="submit" class="button">Import</button>
                 </form>
                 {% if async_active %}
-                <form method="POST" action="{% url 'queue_import' filename %}">
-                    {% csrf_token %}
-                    <button name="submit" class="button">Queue Import</button>
-                </form>
+                    {% if type == "supp_files" or type == "update" %}
+                    <form method="POST" action="{% url 'queue_import' filename %}?type={{ type }}">
+                        {% csrf_token %}
+                        <button name="submit" class="button">Queue Import</button>
+                    </form>
+                    {% endif %}
                 {% endif %}
             {% endif %}
         </div>
